@@ -26,20 +26,20 @@ export default function LoginPage() {
 
 
 	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-		 e.preventDefault();
+		e.preventDefault();
 		setError('');
 		setSuccess('');
 		if (!validate()) return;
 
 		setLoading(true);
 		try {
-					const res = await fetch('/api/login', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ email, password }),
-						// ensure cookies from the response are accepted and stored by the browser
-						credentials: 'same-origin',
-					});
+			const res = await fetch('/api/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, password }),
+				// ensure cookies from the response are accepted and stored by the browser
+				credentials: 'same-origin',
+			});
 
 			if (!res.ok) {
 				// Try to parse error message from response
@@ -50,21 +50,22 @@ export default function LoginPage() {
 			setSuccess('Login successful — redirecting...');
 			// small delay to show success message, then navigate
 			setTimeout(() => router.push('/dashboard'), 800);
-			} catch (err: unknown) {
-				if (err instanceof Error) {
-					setError(err.message);
-				} else {
-					setError(String(err));
-				}
+		} catch (err: unknown) {
+			if (err instanceof Error) {
+				setError(err.message);
+			} else {
+				setError(String(err));
+			}
 		} finally {
 			setLoading(false);
 		}
 	};
 
 	return (
-		<main style={styles.page}>
+	<div className='flex'>
+		<main className='flex flex-1 justify-center items-center min-h-screen'>
 			<form onSubmit={handleSubmit} style={styles.card} aria-labelledby="login-heading">
-				<h1 id="login-heading" style={styles.title}>Sign in</h1>
+				<h1 id="login-heading" style={styles.title}>Welcome back</h1>
 
 				{error && <div role="alert" style={styles.error}>{error}</div>}
 				{success && <div role="status" style={styles.success}>{success}</div>}
@@ -102,6 +103,11 @@ export default function LoginPage() {
 				</p>
 			</form>
 		</main>
+		<div className='hidden flex-1 text-white bg-blue-500 sm:flex flex-col justify-center p-8'>
+			<h1 className='text-3xl font-bold'>Ticktock</h1>
+			<p>Lorem ipsum</p>
+		</div>
+	</div>
 	);
 }
 

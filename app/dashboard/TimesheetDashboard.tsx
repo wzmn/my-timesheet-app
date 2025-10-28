@@ -1,10 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getPaginationRowModel,
+  flexRender,
+  type ColumnDef,
+  type CellContext,
+} from '@tanstack/react-table';
 
 type Entry = {
   id: string;
+  owner?: string;
   date: string; // ISO date
   hours: number;
   description?: string;
@@ -30,7 +39,7 @@ export default function TimesheetDashboard() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/timesheet');
+      const res = await fetch('/api/timesheet', { credentials: 'same-origin' });
       if (!res.ok) throw new Error('Failed to load entries');
       const data = await res.json();
       setEntries(data.entries || []);
@@ -39,16 +48,6 @@ export default function TimesheetDashboard() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleLogout() {
-    try {
-      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
-    } catch (err) {
-      // ignore errors — proceed to redirect
-    }
-    // force client-side navigation to login which will show the login page
-    router.push('/login');
   }
 
   function totalHours() {
@@ -69,6 +68,7 @@ export default function TimesheetDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        credentials: 'same-origin',
       });
       if (!res.ok) {
         const p = await res.json().catch(() => null);
@@ -87,6 +87,40 @@ export default function TimesheetDashboard() {
       setSubmitting(false);
     }
   }
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (err) {
+      // ignore errors — proceed to redirect
+    }
+    // force client-side navigation to login which will show the login page
+    router.push('/login');
+  }
+
+  const columns = useMemo<ColumnDef<Entry, any>[]>(() => [
+    {
+      accessorKey: 'date',
+      header: 'Date',
+      cell: (info: CellContext<Entry, any>) => new Date(info.getValue() as string).toLocaleDateString(),
+    },
+    {
+      accessorKey: 'hours',
+      header: 'Hours',
+    },
+    {
+      accessorKey: 'description',
+      header: 'Description',
+    },
+  ], []);
+
+  const table = useReactTable({
+    data: entries,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: { pagination: { pageIndex: 0, pageSize: 10 } },
+  } as any);
 
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
@@ -128,27 +162,70 @@ export default function TimesheetDashboard() {
         <h2 style={{ marginTop: 0 }}>Entries</h2>
         {loading ? (
           <div>Loading…</div>
-        ) : entries.length === 0 ? (
+        ) : table.getRowModel().rows.length === 0 ? (
           <div>No entries yet.</div>
         ) : (
+          <>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-                <th style={{ padding: '8px' }}>Date</th>
-                <th style={{ padding: '8px' }}>Hours</th>
-                <th style={{ padding: '8px' }}>Description</th>
-              </tr>
+              {table.getHeaderGroups().map((headerGroup: any) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header: any) => (
+                    <th key={header.id} style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
             </thead>
             <tbody>
-              {entries.map((en) => (
-                <tr key={en.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '8px', verticalAlign: 'top' }}>{new Date(en.date).toLocaleDateString()}</td>
-                  <td style={{ padding: '8px', verticalAlign: 'top' }}>{en.hours}</td>
-                  <td style={{ padding: '8px', verticalAlign: 'top' }}>{en.description}</td>
+              {table.getRowModel().rows.map((row: any) => (
+                <tr key={row.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  {row.getVisibleCells().map((cell: any) => (
+                    <td key={cell.id} style={{ padding: '8px', verticalAlign: 'top' }}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
           </table>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+            <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>{'<<'}</button>
+            <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>Previous</button>
+            <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>Next</button>
+            <button onClick={() => table.setPageIndex(Math.max(0, table.getPageCount() - 1))} disabled={!table.getCanNextPage()}>Last</button>
+
+            <span style={{ marginLeft: 12 }}>
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+            </span>
+
+            <label style={{ marginLeft: 12 }}>
+              | Go to page:
+              <input
+                type="number"
+                defaultValue={table.getState().pagination.pageIndex + 1}
+                onChange={e => {
+                  const page = e.target.value ? Number(e.target.value) - 1 : 0;
+                  table.setPageIndex(page);
+                }}
+                style={{ width: 60, marginLeft: 8 }}
+              />
+            </label>
+
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={e => table.setPageSize(Number(e.target.value))}
+              style={{ marginLeft: 12 }}
+            >
+              {[5, 10, 20, 50].map(size => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+          </div>
+          </>
         )}
       </section>
     </div>
